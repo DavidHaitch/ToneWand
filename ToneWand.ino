@@ -1,9 +1,5 @@
 #include <SPI.h>
 #include <Smooth.h>
-#define CS_IMU 8 // Chip select for IMU can be any open digital pin
-#define ImuToDeg(x) (((float)x)/100.0) // IMU angle info is in deg*100
-#define ImuToVel(x) (((float)x)/10.0) // IMU angular vel is in deg/s*10
-#define ImuToGee(x) (((float)x)/10000.0)
 #include <MozziGuts.h>
 #include <string.h>
 #include "Notes.h"
@@ -13,25 +9,35 @@
 #include <tables/cos2048_int8.h>
 #include "Gyro.h"
 #include "IMU.h"
+
 #define CONTROL_RATE 256 // powers of 2 please
+#define CS_IMU 8
+#define ImuToDeg(x) (((float)x)/100.0) // IMU angle info is in deg*100
+#define ImuToVel(x) (((float)x)/10.0) // IMU angular vel is in deg/s*10
+#define ImuToGee(x) (((float)x)/10000.0)
+
 int roll, pitch, yaw, rolldot, pitchdot, yawdot;
 int accel_x, accel_y, accel_z;
-float minYaw = -10.0;
-float maxYaw = 10.0;
-int lastTone = 1000;
-Oscil<COS2048_NUM_CELLS, AUDIO_RATE> aCos(COS2048_DATA);
-Oscil<COS2048_NUM_CELLS, AUDIO_RATE> aChord1(COS2048_DATA);
-Oscil<COS2048_NUM_CELLS, AUDIO_RATE> aChord2(COS2048_DATA);
-Smooth <int> kSmoothNote(0.8);
+
+Oscil <COS2048_NUM_CELLS, AUDIO_RATE> aCarrier(COS2048_DATA);
+Oscil <COS2048_NUM_CELLS, AUDIO_RATE> aModulator(COS2048_DATA);
+Oscil<COS2048_NUM_CELLS, CONTROL_RATE> kIntensityMod(COS2048_DATA);
+
+float smoothness = 0.95;
+Smooth <long> smoothIntensity(smoothness);
+
 int amplitude = 0;
-int lastAmplitude;
 int baseTone = 0;
+int mod_ratio = 6; // brightness (harmonics)
+long fm_intensity;
+
 void setup()
 {
   Serial.begin(57600);
   pinMode(CS_IMU, OUTPUT);
   SPI.begin();
-
+  
+  kIntensityMod.setFreq(500);
   startMozzi(CONTROL_RATE); // set a control rate of 64 (powers of 2 please)
 }
 
@@ -42,19 +48,16 @@ void loop()
 
 int updateAudio()
 {
-    int note = aCos.next();
-    return (note * amplitude)>>8; // phase modulation to modulate frequency
+    long modulation = smoothIntensity.next(fm_intensity) * aModulator.next();
+  return (aCarrier.phMod(modulation) * amplitude)>>8;
 }
 
 int amplitudeMod = 0;
 void updateControl()
 {
   ReadIMU(0);
-  
-  
-  minYaw = -180;
-  maxYaw = 180;
-  
+  int minYaw = -180;
+  int maxYaw = 180;
   int shift = 0;
   
   if(ImuToDeg(pitch) < 0)
@@ -63,19 +66,17 @@ void updateControl()
   }
   
   baseTone = map(ImuToDeg(yaw), minYaw, maxYaw, 0 + shift, 12 + shift);
-
-  //amplitude = map(abs(ImuToDeg(roll)), 0, 90, 0, 255);
-  
   if(abs(ImuToVel(rolldot)) >= 360)
   {
     amplitude = 255;
   }
 
-  lastTone = baseTone;
   float baseFreq = GetNote(baseTone);
-  aCos.setFreq(kSmoothNote.next(baseFreq));
-  //aChord2.setFreq(GetNote(baseTone+4));
-  lastAmplitude = amplitude;
+  int mod_freq = baseFreq * mod_ratio;
+  aCarrier.setFreq(baseFreq);
+  aModulator.setFreq(mod_freq);
+  fm_intensity = (100 * (kIntensityMod.next()+128))>>8; // shift back to range after 8 bit multiply
+
   amplitude -= 3;
   if(amplitude > 255) amplitude = 255;
   if(amplitude < 0) amplitude = 0;
