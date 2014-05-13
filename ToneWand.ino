@@ -23,21 +23,18 @@ Oscil <COS2048_NUM_CELLS, AUDIO_RATE> aCarrier(COS2048_DATA);
 Oscil <COS2048_NUM_CELLS, AUDIO_RATE> aModulator(COS2048_DATA);
 Oscil<COS2048_NUM_CELLS, CONTROL_RATE> kIntensityMod(COS2048_DATA);
 
-float smoothness = 0.95;
-Smooth <long> smoothIntensity(smoothness);
+Smooth <long> smoothIntensity(0.9);
 Smooth <long> smoothPitch(0.85);
 int amplitude = 0;
 int baseTone = 0;
-float mod_ratio = 2; // brightness (harmonics)
 long fm_intensity;
-int intensityMultiplier = 100;
+
 void setup()
 {
   pinMode(CS_IMU, OUTPUT);
   SPI.begin();
-
-  kIntensityMod.setFreq(500);
-  startMozzi(CONTROL_RATE); // set a control rate of 64 (powers of 2 please)
+  kIntensityMod.setFreq(4);
+  startMozzi(CONTROL_RATE);
 }
 
 void loop()
@@ -65,11 +62,9 @@ void updateControl()
 
   baseTone = map(ImuToDeg(yaw), minYaw, maxYaw, 0 + shift, 12 + shift);
   float baseFreq = smoothPitch.next(GetNote(baseTone));
-  int mod_freq = baseFreq * mod_ratio;
   aCarrier.setFreq(baseFreq);
-  aModulator.setFreq(mod_freq);
-  kIntensityMod.setFreq(16);
-  fm_intensity = kIntensityMod.next()+128; // shift back to range after 8 bit multiply
+  aModulator.setFreq(baseFreq);
+  fm_intensity = kIntensityMod.next();
 
   amplitude--;
   
