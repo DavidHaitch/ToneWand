@@ -1,40 +1,48 @@
+#include <Adafruit_NeoPixel.h>
 #include <SPI.h>
 #include <Smooth.h>
 #include <MozziGuts.h>
-#include <string.h>
-#include "Notes.h"
-#include <Oscil.h> // oscillator template
+#include <Oscil.h>
 #include <AutoMap.h>
 #include <Smooth.h>
-#include <tables/cos2048_int8.h>
-#include "Gyro.h"
-#include "IMU.h"
+#include <tables/sin2048_int8.h>
+
+#define NEOPIXEL_PIN 4
 
 #define CONTROL_RATE 256 // powers of 2 please
 #define CS_IMU 8
 #define ImuToDeg(x) (((float)x)/100.0) // IMU angle info is in deg*100
 #define ImuToVel(x) (((float)x)/10.0) // IMU angular vel is in deg/s*10
 #define ImuToGee(x) (((float)x)/10000.0)
-
+#define FALLOFF 2
+#define SCALE 16
 int roll, pitch, yaw, rolldot, pitchdot, yawdot;
 int accel_x, accel_y, accel_z;
 
-Oscil <COS2048_NUM_CELLS, AUDIO_RATE> aCarrier(COS2048_DATA);
-Oscil <COS2048_NUM_CELLS, AUDIO_RATE> aModulator(COS2048_DATA);
-Oscil<COS2048_NUM_CELLS, CONTROL_RATE> kIntensityMod(COS2048_DATA);
-
-Smooth <long> smoothIntensity(0.9);
+Oscil <SIN2048_NUM_CELLS, AUDIO_RATE> aCarrier(SIN2048_DATA);
 Smooth <long> smoothPitch(0.85);
+
 int amplitude = 0;
 int baseTone = 0;
-long fm_intensity;
+float scaleCoefficient;
+float counter = 0;
 
+Adafruit_NeoPixel ring = Adafruit_NeoPixel(16, NEOPIXEL_PIN, NEO_RGB + NEO_KHZ800);
 void setup()
 {
+  scaleCoefficient = pow(2, 1.0/SCALE);
   pinMode(CS_IMU, OUTPUT);
   SPI.begin();
-  kIntensityMod.setFreq(4);
   startMozzi(CONTROL_RATE);
+
+  ring.begin();
+  ring.setBrightness(32); //0 - 255 scale
+  for(int i = 0; i < 16; i++)
+  {
+    ring.setPixelColor(i, Wheel(i*16));
+  }
+
+  ring.show();
 }
 
 void loop()
@@ -44,8 +52,7 @@ void loop()
 
 int updateAudio()
 {
-  long modulation = smoothIntensity.next(fm_intensity) * aModulator.next();
-  return (aCarrier.phMod(modulation) * amplitude)>>8;
+  return (smoothPitch.next(aCarrier.next()) * amplitude)>>8;
 }
 
 void updateControl()
@@ -55,24 +62,70 @@ void updateControl()
   int maxYaw = 180;
   int shift = 0;
 
-  if(ImuToDeg(pitch) < 0)
+  if(ImuToDeg(pitch) > 20)
   {
-    shift = 12;
+    shift = SCALE;
   }
 
-  baseTone = map(ImuToDeg(yaw), minYaw, maxYaw, 0 + shift, 12 + shift);
-  float baseFreq = smoothPitch.next(GetNote(baseTone));
-  aCarrier.setFreq(baseFreq);
-  aModulator.setFreq(baseFreq);
-  fm_intensity = kIntensityMod.next();
-
-  amplitude--;
-  
-  if(abs(ImuToVel(rolldot)) >= 360) amplitude = 255;
-  if(amplitude < 1)
+  baseTone = map(ImuToDeg(yaw), minYaw, maxYaw, 0 + shift, SCALE + shift);
+  if(abs(ImuToVel(rolldot)) >= 270)
   {
-    amplitude = 1;
-    fm_intensity = 0;
+    amplitude = 255;
+    float baseFreq = GetNote(baseTone);
+    aCarrier.setFreq(baseFreq);
+  }
+
+  if(amplitude <= 32)
+  {
+    //UpdateLights(baseTone + 1);
+    UpdateLights((baseTone % 16) + 1);
+  }
+
+  amplitude -= FALLOFF;
+
+  if(amplitude < 0) amplitude = 0;
+}
+
+
+int counter2 = 0;
+void UpdateLights(int param)
+{
+  for(int i = 0; i < param; i++)
+  {
+    ring.setPixelColor((i+5)%16, Wheel(((i * 256 / ring.numPixels()) + counter2) & 255));
+  }
+
+  if(ImuToDeg(pitch) > 20)
+  {
+    counter2 += 2;
+  }
+  else
+  {
+    counter2 -= 2;
+  }
+  ring.show();
+  for(int i = 0; i < param; i++)
+  {
+    ring.setPixelColor((i+5)%16, 0);
+  }
+
+  counter+= 0.005;
+  if(counter > 3.14) counter = 0;
+}
+
+// Input a value 0 to 255 to get a color value.
+// The colours are a transition r - g - b - back to r.
+uint32_t Wheel(byte WheelPos) {
+  if(WheelPos < 85) {
+    return ring.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
+  } 
+  else if(WheelPos < 170) {
+    WheelPos -= 85;
+    return ring.Color(255 - WheelPos * 3, 0, WheelPos * 3);
+  } 
+  else {
+    WheelPos -= 170;
+    return ring.Color(0, WheelPos * 3, 255 - WheelPos * 3);
   }
 }
 
@@ -102,8 +155,9 @@ int getSPIint(int command)
 
 float GetNote(int semitoneOffset)
 {
-  return 220 * pow(1.059463, semitoneOffset);
+  return 110 * pow(scaleCoefficient, semitoneOffset);
 }
+
 
 
 
