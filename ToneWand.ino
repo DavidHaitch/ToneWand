@@ -6,11 +6,6 @@
 #include <AutoMap.h>
 #include <Smooth.h>
 #include <tables/sin2048_int8.h>
-<<<<<<< HEAD
-#include <tables/saw_analogue512_int8.h>
-=======
-#include <tables/saw2048_int8.h>
->>>>>>> f5123241c3e8c6e561943572c6121d57a325286c
 
 #define NEOPIXEL_PIN 4
 
@@ -23,12 +18,7 @@
 #define SCALE 8
 int roll, pitch, yaw, rolldot, pitchdot, yawdot;
 int accel_x, accel_y, accel_z;
-
-<<<<<<< HEAD
 Oscil <SIN2048_NUM_CELLS, AUDIO_RATE> aCarrier(SIN2048_DATA);
-=======
-Oscil <SAW2048_NUM_CELLS, AUDIO_RATE> aCarrier(SAW2048_DATA);
->>>>>>> f5123241c3e8c6e561943572c6121d57a325286c
 Oscil <SIN2048_NUM_CELLS, AUDIO_RATE> aHarmonic(SIN2048_DATA);
 Smooth <long> smoothPitch(0.85);
 
@@ -46,17 +36,7 @@ void setup()
   startMozzi(CONTROL_RATE);
 
   ring.begin();
-<<<<<<< HEAD
   ring.setBrightness(64); //0 - 255 scale
-=======
-  ring.setBrightness(32); //0 - 255 scale
-  for(int i = 0; i < 16; i++)
-  {
-    //ring.setPixelColor(i, Wheel(i*16));
-  }
-
-  //ring.show();
->>>>>>> f5123241c3e8c6e561943572c6121d57a325286c
 }
 
 void loop()
@@ -66,11 +46,7 @@ void loop()
 
 int updateAudio()
 {
-<<<<<<< HEAD
   return ((aCarrier.next()) * amplitude)>>8;
-=======
-  return (aCarrier.phMod(aHarmonic.next()) * amplitude)>>8;
->>>>>>> f5123241c3e8c6e561943572c6121d57a325286c
 }
 
 void updateControl()
@@ -82,21 +58,11 @@ void updateControl()
 
 
   baseTone = map(ImuToDeg(yaw), minYaw, maxYaw, 0, SCALE * 2);
-<<<<<<< HEAD
-  //if((lastPitch < 0 && pitch > 0 ) || (lastPitch > 0 && pitch < 0 ))
-  if(abs(ImuToDeg(pitch)) < 10)
-=======
   if(abs(ImuToDeg(pitch)) <= 10)
->>>>>>> f5123241c3e8c6e561943572c6121d57a325286c
   {
     amplitude = 255;
     float baseFreq = GetNote(baseTone);
     aCarrier.setFreq(baseFreq);
-<<<<<<< HEAD
-    //aHarmonic.setFreq(GetNote(baseTone+7));
-=======
-    aHarmonic.setFreq(GetNote(baseTone - 48));
->>>>>>> f5123241c3e8c6e561943572c6121d57a325286c
   }
   else
   {
