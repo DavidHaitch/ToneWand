@@ -6,6 +6,7 @@
 #include <AutoMap.h>
 #include <Smooth.h>
 #include <tables/sin2048_int8.h>
+#include <tables/saw_analogue512_int8.h>
 
 #define NEOPIXEL_PIN 4
 
@@ -15,18 +16,19 @@
 #define ImuToVel(x) (((float)x)/10.0) // IMU angular vel is in deg/s*10
 #define ImuToGee(x) (((float)x)/10000.0)
 #define FALLOFF 2
-#define SCALE 16
+#define SCALE 8
 int roll, pitch, yaw, rolldot, pitchdot, yawdot;
 int accel_x, accel_y, accel_z;
 
 Oscil <SIN2048_NUM_CELLS, AUDIO_RATE> aCarrier(SIN2048_DATA);
+Oscil <SIN2048_NUM_CELLS, AUDIO_RATE> aHarmonic(SIN2048_DATA);
 Smooth <long> smoothPitch(0.85);
 
 int amplitude = 0;
 int baseTone = 0;
 float scaleCoefficient;
 float counter = 0;
-
+float lastPitch = 1;
 Adafruit_NeoPixel ring = Adafruit_NeoPixel(16, NEOPIXEL_PIN, NEO_RGB + NEO_KHZ800);
 void setup()
 {
@@ -36,13 +38,7 @@ void setup()
   startMozzi(CONTROL_RATE);
 
   ring.begin();
-  ring.setBrightness(32); //0 - 255 scale
-  for(int i = 0; i < 16; i++)
-  {
-    ring.setPixelColor(i, Wheel(i*16));
-  }
-
-  ring.show();
+  ring.setBrightness(64); //0 - 255 scale
 }
 
 void loop()
@@ -52,7 +48,7 @@ void loop()
 
 int updateAudio()
 {
-  return (smoothPitch.next(aCarrier.next()) * amplitude)>>8;
+  return ((aCarrier.next()) * amplitude)>>8;
 }
 
 void updateControl()
@@ -62,26 +58,27 @@ void updateControl()
   int maxYaw = 180;
   int shift = 0;
 
-  if(ImuToDeg(pitch) > 20)
-  {
-    shift = SCALE;
-  }
 
-  baseTone = map(ImuToDeg(yaw), minYaw, maxYaw, 0 + shift, SCALE + shift);
-  if(abs(ImuToVel(rolldot)) >= 270)
+  baseTone = map(ImuToDeg(yaw), minYaw, maxYaw, 0, SCALE * 2);
+  //if((lastPitch < 0 && pitch > 0 ) || (lastPitch > 0 && pitch < 0 ))
+  if(abs(ImuToDeg(pitch)) < 10)
   {
     amplitude = 255;
     float baseFreq = GetNote(baseTone);
     aCarrier.setFreq(baseFreq);
+    //aHarmonic.setFreq(GetNote(baseTone+7));
   }
+  else
+  {
+    amplitude -= FALLOFF;
+  }
+  
+  lastPitch = pitch;
 
   if(amplitude <= 32)
   {
-    //UpdateLights(baseTone + 1);
     UpdateLights((baseTone % 16) + 1);
   }
-
-  amplitude -= FALLOFF;
 
   if(amplitude < 0) amplitude = 0;
 }
